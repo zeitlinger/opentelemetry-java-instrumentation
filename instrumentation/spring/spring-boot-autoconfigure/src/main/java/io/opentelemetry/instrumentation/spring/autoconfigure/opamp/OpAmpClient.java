@@ -31,32 +31,35 @@ public class OpAmpClient {
       "/home/gregor/source/spring-boot-opentelemetry-demo/opamp";
 
   private final WatchService watchService;
-  private final DynamicLogLevels dynamicLogLevels;
+  private final DynamicLogLevels logLevels;
+  private final DynamicSampler sampler;
 
   private boolean poll = true;
 
-  public OpAmpClient(WatchService watchService, DynamicLogLevels dynamicLogLevels) {
+  public OpAmpClient(
+      WatchService watchService, DynamicLogLevels logLevels, DynamicSampler sampler) {
     this.watchService = watchService;
-    this.dynamicLogLevels = dynamicLogLevels;
+    this.logLevels = logLevels;
+    this.sampler = sampler;
   }
 
-  public static OpAmpClient create() {
+  public static OpAmpClient create(DynamicSampler sampler) {
     try {
       WatchService watchService = FileSystems.getDefault().newWatchService();
       Path path = Paths.get(CONFIG_DIR);
       path.register(watchService, ENTRY_CREATE, ENTRY_MODIFY);
-      OpAmpClient client = new OpAmpClient(watchService, new DynamicLogLevels());
+      OpAmpClient client = new OpAmpClient(watchService, new DynamicLogLevels(), sampler);
       client.init();
       client.load();
       new Thread(client::poll).start();
       return client;
     } catch (IOException e) {
-      throw new RuntimeException(e);
+      throw new IllegalStateException(e);
     }
   }
 
   private void init() {
-    dynamicLogLevels.init();
+    logLevels.init();
   }
 
   public void poll() {
@@ -80,7 +83,8 @@ public class OpAmpClient {
       Path path = Paths.get(CONFIG_DIR, "config.yaml");
       OpAmpConfig config = yaml.load(new FileInputStream(path.toFile()));
 
-      dynamicLogLevels.applyLogLevels(config.logLevels);
+      logLevels.applyLogLevels(config.logLevels);
+      sampler.setRatio(config.sampleRatio);
     } catch (FileNotFoundException e) {
       logger.log(java.util.logging.Level.INFO, "File not found", e);
     } catch (YAMLException e) {

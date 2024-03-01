@@ -13,6 +13,7 @@ import io.opentelemetry.instrumentation.spring.autoconfigure.exporters.otlp.Otlp
 import io.opentelemetry.instrumentation.spring.autoconfigure.exporters.otlp.OtlpMetricExporterAutoConfiguration;
 import io.opentelemetry.instrumentation.spring.autoconfigure.exporters.otlp.OtlpSpanExporterAutoConfiguration;
 import io.opentelemetry.instrumentation.spring.autoconfigure.internal.MapConverter;
+import io.opentelemetry.instrumentation.spring.autoconfigure.opamp.DynamicSampler;
 import io.opentelemetry.instrumentation.spring.autoconfigure.opamp.OpAmpClient;
 import io.opentelemetry.instrumentation.spring.autoconfigure.propagators.PropagationProperties;
 import io.opentelemetry.instrumentation.spring.autoconfigure.resources.OtelResourceAutoConfiguration;
@@ -35,7 +36,6 @@ import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.SdkTracerProviderBuilder;
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
 import io.opentelemetry.sdk.trace.export.SpanExporter;
-import io.opentelemetry.sdk.trace.samplers.Sampler;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
@@ -118,8 +118,14 @@ public class OpenTelemetryAutoConfiguration {
 
     @Bean(destroyMethod = "") // SDK components are shutdown from the OpenTelemetry instance
     @ConditionalOnMissingBean
+    public DynamicSampler dynamicSampler(SamplerProperties samplerProperties) {
+      return DynamicSampler.create(samplerProperties.getProbability());
+    }
+
+    @Bean(destroyMethod = "") // SDK components are shutdown from the OpenTelemetry instance
+    @ConditionalOnMissingBean
     public SdkTracerProvider sdkTracerProvider(
-        SamplerProperties samplerProperties,
+        DynamicSampler sampler,
         ObjectProvider<List<SpanExporter>> spanExportersProvider,
         Resource otelResource) {
       SdkTracerProviderBuilder tracerProviderBuilder = SdkTracerProvider.builder();
@@ -128,10 +134,7 @@ public class OpenTelemetryAutoConfiguration {
           .map(spanExporter -> BatchSpanProcessor.builder(spanExporter).build())
           .forEach(tracerProviderBuilder::addSpanProcessor);
 
-      return tracerProviderBuilder
-          .setResource(otelResource)
-          .setSampler(Sampler.traceIdRatioBased(samplerProperties.getProbability()))
-          .build();
+      return tracerProviderBuilder.setResource(otelResource).setSampler(sampler).build();
     }
 
     @Bean(destroyMethod = "") // SDK components are shutdown from the OpenTelemetry instance
@@ -199,7 +202,8 @@ public class OpenTelemetryAutoConfiguration {
         SdkTracerProvider tracerProvider,
         SdkMeterProvider meterProvider,
         SdkLoggerProvider loggerProvider,
-        ObjectProvider<List<OpenTelemetryInjector>> openTelemetryConsumerProvider) {
+        ObjectProvider<List<OpenTelemetryInjector>> openTelemetryConsumerProvider,
+        DynamicSampler sampler) {
 
       ContextPropagators propagators = propagatorsProvider.getIfAvailable(ContextPropagators::noop);
 
@@ -215,7 +219,7 @@ public class OpenTelemetryAutoConfiguration {
           openTelemetryConsumerProvider.getIfAvailable(() -> Collections.emptyList());
       openTelemetryInjectors.forEach(consumer -> consumer.accept(openTelemetry));
 
-      OpAmpClient.create();
+      OpAmpClient.create(sampler);
 
       return openTelemetry;
     }

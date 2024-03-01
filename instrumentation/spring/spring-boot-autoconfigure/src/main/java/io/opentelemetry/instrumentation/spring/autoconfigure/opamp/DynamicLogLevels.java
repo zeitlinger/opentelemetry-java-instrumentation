@@ -77,7 +77,7 @@ public class DynamicLogLevels {
     return (Logger) org.slf4j.LoggerFactory.getLogger(logger1);
   }
 
-  private Level severityToLevel(Severity severity) {
+  private static Level severityToLevel(Severity severity) {
     switch (severity) {
       case TRACE:
         return Level.TRACE;
@@ -89,6 +89,8 @@ public class DynamicLogLevels {
         return Level.WARN;
       case ERROR:
         return Level.ERROR;
+      default:
+        break;
     }
     throw new IllegalArgumentException("unsupported severity: " + severity);
   }
