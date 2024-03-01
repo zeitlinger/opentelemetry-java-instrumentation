@@ -36,6 +36,7 @@ import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.SdkTracerProviderBuilder;
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
 import io.opentelemetry.sdk.trace.export.SpanExporter;
+import io.opentelemetry.semconv.ResourceAttributes;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
@@ -203,7 +204,8 @@ public class OpenTelemetryAutoConfiguration {
         SdkMeterProvider meterProvider,
         SdkLoggerProvider loggerProvider,
         ObjectProvider<List<OpenTelemetryInjector>> openTelemetryConsumerProvider,
-        DynamicSampler sampler) {
+        DynamicSampler sampler,
+        Resource resource) {
 
       ContextPropagators propagators = propagatorsProvider.getIfAvailable(ContextPropagators::noop);
 
@@ -219,7 +221,9 @@ public class OpenTelemetryAutoConfiguration {
           openTelemetryConsumerProvider.getIfAvailable(() -> Collections.emptyList());
       openTelemetryInjectors.forEach(consumer -> consumer.accept(openTelemetry));
 
-      OpAmpClient.create(sampler);
+      String serviceName = resource.getAttribute(ResourceAttributes.SERVICE_NAME);
+
+      OpAmpClient.create(sampler, serviceName);
 
       return openTelemetry;
     }
