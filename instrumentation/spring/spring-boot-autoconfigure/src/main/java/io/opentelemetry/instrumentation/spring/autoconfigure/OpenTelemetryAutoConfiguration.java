@@ -13,6 +13,7 @@ import io.opentelemetry.instrumentation.spring.autoconfigure.exporters.otlp.Otlp
 import io.opentelemetry.instrumentation.spring.autoconfigure.exporters.otlp.OtlpMetricExporterAutoConfiguration;
 import io.opentelemetry.instrumentation.spring.autoconfigure.exporters.otlp.OtlpSpanExporterAutoConfiguration;
 import io.opentelemetry.instrumentation.spring.autoconfigure.internal.MapConverter;
+import io.opentelemetry.instrumentation.spring.autoconfigure.opamp.OpAmpClient;
 import io.opentelemetry.instrumentation.spring.autoconfigure.propagators.PropagationProperties;
 import io.opentelemetry.instrumentation.spring.autoconfigure.resources.OtelResourceAutoConfiguration;
 import io.opentelemetry.instrumentation.spring.autoconfigure.resources.OtelResourceProperties;
@@ -213,6 +214,8 @@ public class OpenTelemetryAutoConfiguration {
       List<OpenTelemetryInjector> openTelemetryInjectors =
           openTelemetryConsumerProvider.getIfAvailable(() -> Collections.emptyList());
       openTelemetryInjectors.forEach(consumer -> consumer.accept(openTelemetry));
+
+      OpAmpClient.create();
 
       return openTelemetry;
     }
