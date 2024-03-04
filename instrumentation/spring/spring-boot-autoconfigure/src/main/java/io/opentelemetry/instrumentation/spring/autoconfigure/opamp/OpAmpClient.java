@@ -95,6 +95,7 @@ public class OpAmpClient {
   }
 
   private void callOpAmpServer() {
+    config.availableLoggers = logLevels.getAvailableLoggers();
     Opamp.AgentToServer agentToServer = getAgentToServer(serviceInstanceId, serviceName, config);
 
     Request.Builder requestBuilder = (new Request.Builder()).url(this.url);
@@ -125,7 +126,7 @@ public class OpAmpClient {
                   return;
                 }
                 Opamp.ServerToAgent serverToAgent = Opamp.ServerToAgent.parseFrom(body.bytes());
-                applyConfig(extractRemoteConfig(serverToAgent));
+                applyConfig(extractRemoteConfig(serverToAgent, OpAmpClient.this.serviceName));
               }
             });
   }
@@ -141,9 +142,8 @@ public class OpAmpClient {
     return new Yaml(new Constructor(OpAmpConfig.class, new LoaderOptions()));
   }
 
-  public Opamp.AgentToServer getAgentToServer(
+  private static Opamp.AgentToServer getAgentToServer(
       String serviceInstanceId, String serviceName, OpAmpConfig config) {
-    config.availableLoggers = logLevels.getAvailableLoggers();
     String dump = getYaml().dump(config);
 
     return Opamp.AgentToServer.newBuilder()
@@ -172,9 +172,10 @@ public class OpAmpClient {
         .build();
   }
 
-  public OpAmpConfig extractRemoteConfig(Opamp.ServerToAgent serverToAgent) {
+  private static OpAmpConfig extractRemoteConfig(
+      Opamp.ServerToAgent serverToAgent, String serviceName) {
     Opamp.AgentConfigFile agentConfigFile =
-        serverToAgent.getRemoteConfig().getConfig().getConfigMapMap().get("java-config");
+        serverToAgent.getRemoteConfig().getConfig().getConfigMapMap().get(serviceName);
 
     if (agentConfigFile == null) {
       return new OpAmpConfig();
