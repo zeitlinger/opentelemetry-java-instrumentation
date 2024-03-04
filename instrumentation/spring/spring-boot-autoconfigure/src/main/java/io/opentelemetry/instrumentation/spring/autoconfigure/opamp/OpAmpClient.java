@@ -6,8 +6,10 @@
 package io.opentelemetry.instrumentation.spring.autoconfigure.opamp;
 
 import com.google.protobuf.ByteString;
-import io.opentelemetry.testing.internal.armeria.internal.shaded.guava.base.Charsets;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.logging.Level;
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -57,11 +59,11 @@ public class OpAmpClient {
   public static OpAmpClient create(
       DynamicSampler sampler, String serviceName, String serviceInstanceId) {
 
-    OkHttpClient okHttpClient = (new OkHttpClient.Builder()).build();
+    OkHttpClient okHttpClient = new OkHttpClient.Builder().build();
 
     OpAmpClient client =
         new OpAmpClient(
-            String.format("%s/api/v0/opamp", AGENT_URL),
+            String.format("%s/api/v0/debugdial", AGENT_URL),
             DynamicLogLevels.create(),
             sampler,
             serviceInstanceId,
@@ -95,10 +97,20 @@ public class OpAmpClient {
   }
 
   private void callOpAmpServer() {
+    try {
+      try (InputStream is = new URL(AGENT_URL + "/-/reload").openStream()) {
+        byte[] data = new byte[16384];
+
+        while (is.read(data, 0, data.length) != -1) {}
+      }
+    } catch (IOException e) {
+      logger.log(java.util.logging.Level.INFO, "Error reloading", e);
+      return;
+    }
     config.availableLoggers = logLevels.getAvailableLoggers();
     Opamp.AgentToServer agentToServer = getAgentToServer(serviceInstanceId, serviceName, config);
 
-    Request.Builder requestBuilder = (new Request.Builder()).url(this.url);
+    Request.Builder requestBuilder = new Request.Builder().url(this.url);
     requestBuilder.post(
         okhttp3.RequestBody.create(
             agentToServer.toByteArray(), okhttp3.MediaType.parse("application/x-protobuf")));
@@ -165,7 +177,7 @@ public class OpAmpClient {
                             "java-config",
                             Opamp.AgentConfigFile.newBuilder()
                                 .setContentType("application/yaml")
-                                .setBody(ByteString.copyFrom(dump, Charsets.UTF_8))
+                                .setBody(ByteString.copyFrom(dump, StandardCharsets.UTF_8))
                                 .build())
                         .build())
                 .build())

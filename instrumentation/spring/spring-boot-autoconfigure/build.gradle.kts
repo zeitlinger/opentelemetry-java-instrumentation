@@ -69,7 +69,9 @@ dependencies {
   testImplementation("io.opentelemetry:opentelemetry-exporter-zipkin")
   testImplementation(project(":instrumentation-annotations"))
 
-  implementation("io.opentelemetry.opamp:opamp-java:1.0.0-SNAPSHOT")
+  implementation("io.opentelemetry.opamp:opamp-java:1.0.0-SNAPSHOT") {
+    exclude(group = "io.opentelemetry.opamp", module = "proto")
+  }
   implementation("com.google.protobuf:protobuf-java:3.19.4")
   implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }
