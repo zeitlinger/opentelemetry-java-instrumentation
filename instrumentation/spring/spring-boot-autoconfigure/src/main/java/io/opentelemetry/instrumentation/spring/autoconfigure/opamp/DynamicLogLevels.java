@@ -15,10 +15,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
 
 public class DynamicLogLevels {
 
   public static class LogDecision {
+
     private final Severity severity;
     private final Severity samplingSeverity;
 
@@ -40,14 +42,22 @@ public class DynamicLogLevels {
       java.util.logging.Logger.getLogger(OpAmpClient.class.getName());
 
   public static final Logger ROOT_LOGGER = getLogger(Logger.ROOT_LOGGER_NAME);
-  private final Map<String, Level> originalLevels = new ConcurrentHashMap<>();
+  private final Map<String, Level> originalLevels;
   private Map<String, Severity> otelLevels = new HashMap<>();
   private Map<String, Severity> samplingOtelLevels = new HashMap<>();
 
-  private Level originalRootLevel;
+  private final Map<String, Severity> availableLoggers;
 
-  void init() {
-    originalRootLevel = ROOT_LOGGER.getLevel();
+  public DynamicLogLevels(
+      Map<String, Severity> availableLoggers, Map<String, Level> originalLevels) {
+    this.availableLoggers = availableLoggers;
+    this.originalLevels = originalLevels;
+  }
+
+  public static DynamicLogLevels create() {
+    Map<String, Level> originalLevels = new ConcurrentHashMap<>();
+
+    Level originalRootLevel = ROOT_LOGGER.getLevel();
 
     ROOT_LOGGER
         .iteratorForAppenders()
@@ -75,6 +85,8 @@ public class DynamicLogLevels {
                     });
               }
             });
+
+    return new DynamicLogLevels(readAvailableLoggers(), originalLevels);
   }
 
   void applyLogLevels(OpAmpConfig config) {
@@ -139,8 +151,8 @@ public class DynamicLogLevels {
     return null;
   }
 
-  private static Logger getLogger(String logger1) {
-    return (Logger) org.slf4j.LoggerFactory.getLogger(logger1);
+  private static Logger getLogger(String name) {
+    return (Logger) org.slf4j.LoggerFactory.getLogger(name);
   }
 
   private static Level severityToLevel(Severity severity) {
@@ -159,5 +171,32 @@ public class DynamicLogLevels {
         break;
     }
     throw new IllegalArgumentException("unsupported severity: " + severity);
+  }
+
+  private static Severity levelToSeverity(Level level) {
+    switch (level.levelInt) {
+      case Level.TRACE_INT:
+        return Severity.TRACE;
+      case Level.DEBUG_INT:
+        return Severity.DEBUG;
+      case Level.INFO_INT:
+        return Severity.INFO;
+      case Level.WARN_INT:
+        return Severity.WARN;
+      case Level.ERROR_INT:
+        return Severity.ERROR;
+      default:
+        break;
+    }
+    throw new IllegalArgumentException("unsupported level: " + level);
+  }
+
+  static Map<String, Severity> readAvailableLoggers() {
+    return ROOT_LOGGER.getLoggerContext().getLoggerList().stream()
+        .collect(Collectors.toMap(Logger::getName, l -> levelToSeverity(l.getEffectiveLevel())));
+  }
+
+  public Map<String, Severity> getAvailableLoggers() {
+    return availableLoggers;
   }
 }

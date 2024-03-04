@@ -68,6 +68,10 @@ dependencies {
   testImplementation("io.opentelemetry:opentelemetry-exporter-otlp")
   testImplementation("io.opentelemetry:opentelemetry-exporter-zipkin")
   testImplementation(project(":instrumentation-annotations"))
+
+  implementation("io.opentelemetry.opamp:opamp-java:1.0.0-SNAPSHOT")
+  implementation("com.google.protobuf:protobuf-java:3.19.4")
+  implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }
 
 val latestDepTest = findProperty("testLatestDeps") as Boolean

@@ -202,9 +202,10 @@ public class OpenTelemetryAutoConfiguration {
 
     @Bean
     public OpAmpClient opAmpClient(DynamicSampler sampler, Resource resource) {
+      String serviceInstanceId = resource.getAttribute(ResourceAttributes.SERVICE_INSTANCE_ID);
       String serviceName = resource.getAttribute(ResourceAttributes.SERVICE_NAME);
 
-      return OpAmpClient.create(sampler, serviceName);
+      return OpAmpClient.create(sampler, serviceName, serviceInstanceId);
     }
 
     @Bean

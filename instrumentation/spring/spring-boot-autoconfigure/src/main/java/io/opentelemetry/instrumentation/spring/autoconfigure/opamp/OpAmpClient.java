@@ -5,13 +5,22 @@
 
 package io.opentelemetry.instrumentation.spring.autoconfigure.opamp;
 
+import com.google.protobuf.ByteString;
+import io.opentelemetry.testing.internal.armeria.internal.shaded.guava.base.Charsets;
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.URL;
+import java.util.logging.Level;
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+import opamp.proto.Anyvalue;
+import opamp.proto.Opamp;
+import org.jetbrains.annotations.NotNull;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.Constructor;
-import org.yaml.snakeyaml.error.YAMLException;
 
 public class OpAmpClient {
 
@@ -21,24 +30,46 @@ public class OpAmpClient {
 
   private final DynamicLogLevels logLevels;
   private final DynamicSampler sampler;
+  private final String serviceInstanceId;
+  private final String serviceName;
+  private OpAmpConfig config;
+  private final OkHttpClient okHttpClient;
   private final String url;
-
   private boolean poll = true;
 
-  public OpAmpClient(String url, DynamicLogLevels logLevels, DynamicSampler sampler) {
+  public OpAmpClient(
+      String url,
+      DynamicLogLevels logLevels,
+      DynamicSampler sampler,
+      String serviceInstanceId,
+      String serviceName,
+      OpAmpConfig config,
+      OkHttpClient okHttpClient) {
     this.url = url;
     this.logLevels = logLevels;
     this.sampler = sampler;
+    this.serviceInstanceId = serviceInstanceId;
+    this.serviceName = serviceName;
+    this.config = config;
+    this.okHttpClient = okHttpClient;
   }
 
-  public static OpAmpClient create(DynamicSampler sampler, String serviceName) {
+  public static OpAmpClient create(
+      DynamicSampler sampler, String serviceName, String serviceInstanceId) {
+
+    OkHttpClient okHttpClient = (new OkHttpClient.Builder()).build();
+
     OpAmpClient client =
         new OpAmpClient(
-            String.format("%s/api/v0/debugdial/%s", AGENT_URL, serviceName),
-            new DynamicLogLevels(),
-            sampler);
+            String.format("%s/api/v0/opamp", AGENT_URL),
+            DynamicLogLevels.create(),
+            sampler,
+            serviceInstanceId,
+            serviceName,
+            new OpAmpConfig(),
+            okHttpClient);
     client.init();
-    client.load();
+    client.callOpAmpServer();
     new Thread(client::poll).start();
     return client;
   }
@@ -49,14 +80,13 @@ public class OpAmpClient {
 
   private void init() {
     Runtime.getRuntime().addShutdownHook(new Thread(() -> poll = false));
-    logLevels.init();
   }
 
   public void poll() {
     while (poll) {
       try {
         Thread.sleep(10000);
-        load();
+        callOpAmpServer();
       } catch (InterruptedException e) {
         logger.log(java.util.logging.Level.INFO, "Interrupted while waiting for file change", e);
         return;
@@ -64,24 +94,92 @@ public class OpAmpClient {
     }
   }
 
-  private void load() {
-    try {
-      try (InputStream is = new URL(AGENT_URL + "/-/reload").openStream()) {
-        byte[] data = new byte[16384];
+  private void callOpAmpServer() {
+    Opamp.AgentToServer agentToServer = getAgentToServer(serviceInstanceId, serviceName, config);
 
-        while (is.read(data, 0, data.length) != -1) {}
-      }
-      try (InputStream inputStream = new URL(url).openStream()) {
-        Yaml yaml = new Yaml(new Constructor(OpAmpConfig.class, new LoaderOptions()));
-        OpAmpConfig config = yaml.load(inputStream);
+    Request.Builder requestBuilder = (new Request.Builder()).url(this.url);
+    requestBuilder.post(
+        okhttp3.RequestBody.create(
+            agentToServer.toByteArray(), okhttp3.MediaType.parse("application/x-protobuf")));
 
-        logLevels.applyLogLevels(config);
-        sampler.setRatio(config.sampleRatio);
-      }
-    } catch (YAMLException e) {
-      logger.log(java.util.logging.Level.INFO, "Error parsing config", e);
-    } catch (IOException e) {
-      logger.log(java.util.logging.Level.INFO, "Error reading config", e);
+    okHttpClient
+        .newCall(requestBuilder.build())
+        .enqueue(
+            new Callback() {
+              @Override
+              public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                logger.log(Level.INFO, "Failed to send config to server", e);
+              }
+
+              @Override
+              public void onResponse(@NotNull Call call, @NotNull Response response)
+                  throws IOException {
+                int code = response.code();
+                if (code != 200) {
+                  logger.log(Level.INFO, "Failed to send config to server, code: " + code);
+                  return;
+                }
+                ResponseBody body = response.body();
+                if (body == null) {
+                  logger.info("Failed to send config to server, no response body");
+                  return;
+                }
+                Opamp.ServerToAgent serverToAgent = Opamp.ServerToAgent.parseFrom(body.bytes());
+                applyConfig(extractRemoteConfig(serverToAgent));
+              }
+            });
+  }
+
+  private void applyConfig(OpAmpConfig config) {
+    this.config = config;
+
+    logLevels.applyLogLevels(config);
+    sampler.setRatio(config.sampleRatio);
+  }
+
+  private static Yaml getYaml() {
+    return new Yaml(new Constructor(OpAmpConfig.class, new LoaderOptions()));
+  }
+
+  public Opamp.AgentToServer getAgentToServer(
+      String serviceInstanceId, String serviceName, OpAmpConfig config) {
+    config.availableLoggers = logLevels.getAvailableLoggers();
+    String dump = getYaml().dump(config);
+
+    return Opamp.AgentToServer.newBuilder()
+        .setInstanceUid(serviceInstanceId)
+        .setAgentDescription(
+            Opamp.AgentDescription.newBuilder()
+                .addIdentifyingAttributes(
+                    Anyvalue.KeyValue.newBuilder()
+                        .setKey("service.name")
+                        .setValue(
+                            Anyvalue.AnyValue.newBuilder().setStringValue(serviceName).build())
+                        .build())
+                .build())
+        .setEffectiveConfig(
+            Opamp.EffectiveConfig.newBuilder()
+                .setConfigMap(
+                    Opamp.AgentConfigMap.newBuilder()
+                        .putConfigMap(
+                            "java-config",
+                            Opamp.AgentConfigFile.newBuilder()
+                                .setContentType("application/yaml")
+                                .setBody(ByteString.copyFrom(dump, Charsets.UTF_8))
+                                .build())
+                        .build())
+                .build())
+        .build();
+  }
+
+  public OpAmpConfig extractRemoteConfig(Opamp.ServerToAgent serverToAgent) {
+    Opamp.AgentConfigFile agentConfigFile =
+        serverToAgent.getRemoteConfig().getConfig().getConfigMapMap().get("java-config");
+
+    if (agentConfigFile == null) {
+      return new OpAmpConfig();
     }
+
+    return getYaml().load(agentConfigFile.getBody().toStringUtf8());
   }
 }
