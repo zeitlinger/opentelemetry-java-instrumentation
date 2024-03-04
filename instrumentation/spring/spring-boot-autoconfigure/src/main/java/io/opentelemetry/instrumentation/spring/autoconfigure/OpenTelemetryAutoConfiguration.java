@@ -14,6 +14,7 @@ import io.opentelemetry.instrumentation.spring.autoconfigure.exporters.otlp.Otlp
 import io.opentelemetry.instrumentation.spring.autoconfigure.exporters.otlp.OtlpSpanExporterAutoConfiguration;
 import io.opentelemetry.instrumentation.spring.autoconfigure.internal.MapConverter;
 import io.opentelemetry.instrumentation.spring.autoconfigure.opamp.DynamicSampler;
+import io.opentelemetry.instrumentation.spring.autoconfigure.opamp.LogLevelCustomizer;
 import io.opentelemetry.instrumentation.spring.autoconfigure.opamp.OpAmpClient;
 import io.opentelemetry.instrumentation.spring.autoconfigure.propagators.PropagationProperties;
 import io.opentelemetry.instrumentation.spring.autoconfigure.resources.OtelResourceAutoConfiguration;
@@ -141,7 +142,10 @@ public class OpenTelemetryAutoConfiguration {
     @Bean(destroyMethod = "") // SDK components are shutdown from the OpenTelemetry instance
     @ConditionalOnMissingBean
     public SdkLoggerProvider sdkLoggerProvider(
-        ObjectProvider<List<LogRecordExporter>> loggerExportersProvider, Resource otelResource) {
+        ObjectProvider<List<LogRecordExporter>> loggerExportersProvider,
+        Resource otelResource,
+        ConfigProperties config,
+        OpAmpClient client) {
 
       SdkLoggerProviderBuilder loggerProviderBuilder = SdkLoggerProvider.builder();
       loggerProviderBuilder.setResource(otelResource);
@@ -151,7 +155,8 @@ public class OpenTelemetryAutoConfiguration {
           .forEach(
               loggerExporter ->
                   loggerProviderBuilder.addLogRecordProcessor(
-                      BatchLogRecordProcessor.builder(loggerExporter).build()));
+                      LogLevelCustomizer.customizeLogRecordProcessor(
+                          BatchLogRecordProcessor.builder(loggerExporter).build(), client)));
 
       return loggerProviderBuilder.build();
     }
@@ -196,6 +201,13 @@ public class OpenTelemetryAutoConfiguration {
     }
 
     @Bean
+    public OpAmpClient opAmpClient(DynamicSampler sampler, Resource resource) {
+      String serviceName = resource.getAttribute(ResourceAttributes.SERVICE_NAME);
+
+      return OpAmpClient.create(sampler, serviceName);
+    }
+
+    @Bean
     // If you change the bean name, also change it in the OpenTelemetryJdbcDriverAutoConfiguration
     // class
     public OpenTelemetry openTelemetry(
@@ -203,9 +215,7 @@ public class OpenTelemetryAutoConfiguration {
         SdkTracerProvider tracerProvider,
         SdkMeterProvider meterProvider,
         SdkLoggerProvider loggerProvider,
-        ObjectProvider<List<OpenTelemetryInjector>> openTelemetryConsumerProvider,
-        DynamicSampler sampler,
-        Resource resource) {
+        ObjectProvider<List<OpenTelemetryInjector>> openTelemetryConsumerProvider) {
 
       ContextPropagators propagators = propagatorsProvider.getIfAvailable(ContextPropagators::noop);
 
@@ -220,10 +230,6 @@ public class OpenTelemetryAutoConfiguration {
       List<OpenTelemetryInjector> openTelemetryInjectors =
           openTelemetryConsumerProvider.getIfAvailable(() -> Collections.emptyList());
       openTelemetryInjectors.forEach(consumer -> consumer.accept(openTelemetry));
-
-      String serviceName = resource.getAttribute(ResourceAttributes.SERVICE_NAME);
-
-      OpAmpClient.create(sampler, serviceName);
 
       return openTelemetry;
     }

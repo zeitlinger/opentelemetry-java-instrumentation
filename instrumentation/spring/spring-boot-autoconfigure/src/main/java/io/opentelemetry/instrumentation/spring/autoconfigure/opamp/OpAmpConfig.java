@@ -12,6 +12,7 @@ public class OpAmpConfig {
   }
 
   public LogLevel[] logLevels;
+  public LogLevel[] samplingLogLevels;
 
   public double sampleRatio;
 }

@@ -43,6 +43,10 @@ public class OpAmpClient {
     return client;
   }
 
+  public DynamicLogLevels getLogLevels() {
+    return logLevels;
+  }
+
   private void init() {
     Runtime.getRuntime().addShutdownHook(new Thread(() -> poll = false));
     logLevels.init();
@@ -71,7 +75,7 @@ public class OpAmpClient {
         Yaml yaml = new Yaml(new Constructor(OpAmpConfig.class, new LoaderOptions()));
         OpAmpConfig config = yaml.load(inputStream);
 
-        logLevels.applyLogLevels(config.logLevels);
+        logLevels.applyLogLevels(config);
         sampler.setRatio(config.sampleRatio);
       }
     } catch (YAMLException e) {

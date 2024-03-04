@@ -13,14 +13,36 @@ import ch.qos.logback.core.spi.FilterReply;
 import io.opentelemetry.api.logs.Severity;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
 
 public class DynamicLogLevels {
+
+  public static class LogDecision {
+    private final Severity severity;
+    private final Severity samplingSeverity;
+
+    public LogDecision(Severity severity, Severity samplingSeverity) {
+      this.severity = severity;
+      this.samplingSeverity = samplingSeverity;
+    }
+
+    public Severity getSeverity() {
+      return severity;
+    }
+
+    public Severity getSamplingSeverity() {
+      return samplingSeverity;
+    }
+  }
 
   private static final java.util.logging.Logger logger =
       java.util.logging.Logger.getLogger(OpAmpClient.class.getName());
 
   public static final Logger ROOT_LOGGER = getLogger(Logger.ROOT_LOGGER_NAME);
-  private final Map<String, Level> originalLevels = new HashMap<>();
+  private final Map<String, Level> originalLevels = new ConcurrentHashMap<>();
+  private Map<String, Severity> otelLevels = new HashMap<>();
+  private Map<String, Severity> samplingOtelLevels = new HashMap<>();
 
   private Level originalRootLevel;
 
@@ -55,7 +77,30 @@ public class DynamicLogLevels {
             });
   }
 
-  void applyLogLevels(OpAmpConfig.LogLevel[] levels) {
+  void applyLogLevels(OpAmpConfig config) {
+    this.otelLevels =
+        applyLevels(
+            config.logLevels,
+            (l, severity) -> {
+              String name = l.getName();
+              if (!originalLevels.containsKey(name)) {
+                originalLevels.put(name, l.getEffectiveLevel());
+              }
+              Level original = originalLevels.get(name);
+              Level otel = severityToLevel(severity);
+              Level effective = original.toInt() < otel.toInt() ? original : otel;
+              l.setLevel(effective);
+            });
+    this.samplingOtelLevels = applyLevels(config.samplingLogLevels, (l, severity) -> {});
+  }
+
+  private static Map<String, Severity> applyLevels(
+      OpAmpConfig.LogLevel[] levels, BiConsumer<Logger, Severity> applyLevel) {
+    Map<String, Severity> result = new HashMap<>();
+
+    if (levels == null) {
+      return result;
+    }
     for (OpAmpConfig.LogLevel logLevel : levels) {
       String name = logLevel.logger;
 
@@ -63,14 +108,35 @@ public class DynamicLogLevels {
 
       Logger l = getLogger(name);
       if (l != null) {
-        if (!originalLevels.containsKey(name)) {
-          originalLevels.put(name, l.getLevel());
-        }
-        l.setLevel(severityToLevel(severity));
+        applyLevel.accept(l, severity);
+        result.put(name, severity);
       } else {
         logger.info("Logger not found: " + name);
       }
     }
+    return result;
+  }
+
+  public LogDecision getLogDecision(String loggerName) {
+    return new LogDecision(
+        getEffectiveLevel(loggerName, otelLevels),
+        getEffectiveLevel(loggerName, samplingOtelLevels));
+  }
+
+  static Severity getEffectiveLevel(String loggerName, Map<String, Severity> levels) {
+    // find the most specific severity
+    while (loggerName != null) {
+      Severity severity = levels.get(loggerName);
+      if (severity != null) {
+        return severity;
+      }
+      int i = loggerName.lastIndexOf('.');
+      if (i == -1) {
+        break;
+      }
+      loggerName = loggerName.substring(0, i);
+    }
+    return null;
   }
 
   private static Logger getLogger(String logger1) {
