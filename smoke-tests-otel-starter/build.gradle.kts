@@ -70,3 +70,18 @@ graalvmNative {
     setForkEvery(1)
   }
 }
+
+testing {
+  suites {
+    val noLogback by registering(JvmTestSuite::class) {
+      dependencies {
+        val bootVersion = "3.2.3"
+
+        implementation("org.springframework.boot:spring-boot-starter-web:$bootVersion") {
+          exclude("org.springframework.boot", "spring-boot-starter-logging")
+        }
+        implementation("org.springframework.boot:spring-boot-starter-test:$bootVersion")
+      }
+    }
+  }
+}
