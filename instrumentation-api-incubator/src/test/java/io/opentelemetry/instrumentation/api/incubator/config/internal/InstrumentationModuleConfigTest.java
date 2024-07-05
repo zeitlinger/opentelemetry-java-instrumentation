@@ -3,14 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package io.opentelemetry.javaagent.tooling.config;
+package io.opentelemetry.instrumentation.api.incubator.config.internal;
 
 import static java.util.Arrays.asList;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import io.opentelemetry.sdk.autoconfigure.spi.ConfigProperties;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.extension.ExtensionContext;
@@ -19,8 +18,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.ArgumentsProvider;
 import org.junit.jupiter.params.provider.ArgumentsSource;
 
-class AgentConfigTest {
-
+class InstrumentationModuleConfigTest {
   @ParameterizedTest(name = "isInstrumentationEnabled({0}) = {4}")
   @ArgumentsSource(InstrumentationEnabledParams.class)
   void testIsInstrumentationEnabled(
@@ -30,7 +28,7 @@ class AgentConfigTest {
       boolean defaultEnabled,
       boolean expected) {
 
-    ConfigProperties config = mock(ConfigProperties.class);
+    InstrumentationConfig config = mock(InstrumentationConfig.class);
     when(config.getBoolean("otel.instrumentation.first.enabled", defaultEnabled))
         .thenReturn(firstEnabled);
     when(config.getBoolean("otel.instrumentation.second.enabled", defaultEnabled))
@@ -38,7 +36,7 @@ class AgentConfigTest {
 
     assertEquals(
         expected,
-        AgentConfig.isInstrumentationEnabled(
+        InstrumentationModuleConfig.isInstrumentationEnabled(
             config, new TreeSet<>(asList("first", "second")), defaultEnabled));
   }
 

@@ -5,9 +5,14 @@
 
 package io.opentelemetry.instrumentation.spring.autoconfigure.internal;
 
+import io.opentelemetry.instrumentation.api.incubator.config.internal.InstrumentationModuleConfig;
+import io.opentelemetry.instrumentation.spring.autoconfigure.internal.properties.SpringInstrumentationConfig;
+import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.context.annotation.Condition;
 import org.springframework.context.annotation.ConditionContext;
+import org.springframework.core.env.Environment;
 import org.springframework.core.type.AnnotatedTypeMetadata;
 
 /**
@@ -19,19 +24,20 @@ public class InstrumentationPropertyEnabled implements Condition {
   @Override
   public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
     Map<String, Object> attributes =
-        metadata.getAnnotationAttributes(ConditionalOnEnabledInstrumentation.class.getName());
+        Objects.requireNonNull(
+            metadata.getAnnotationAttributes(ConditionalOnEnabledInstrumentation.class.getName()));
 
-    String name = String.format("otel.instrumentation.%s.enabled", attributes.get("module"));
-    Boolean explicit = context.getEnvironment().getProperty(name, Boolean.class);
-    if (explicit != null) {
-      return explicit;
-    }
-    boolean defaultValue = (boolean) attributes.get("enabledByDefault");
-    if (!defaultValue) {
-      return false;
-    }
-    return context
-        .getEnvironment()
-        .getProperty("otel.instrumentation.common.default-enabled", Boolean.class, true);
+    Environment environment = context.getEnvironment();
+    return InstrumentationModuleConfig.isInstrumentationEnabled(
+        new SpringInstrumentationConfig(environment),
+        Collections.singleton((String) attributes.get("module")),
+        isEnabledByDefault(attributes, environment));
+  }
+
+  private static boolean isEnabledByDefault(
+      Map<String, Object> attributes, Environment environment) {
+    return (boolean) attributes.get("enabledByDefault")
+        && environment.getProperty(
+            "otel.instrumentation.common.default-enabled", Boolean.class, true);
   }
 }
