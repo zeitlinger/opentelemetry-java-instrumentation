@@ -95,6 +95,7 @@ abstract class HttpCommonAttributesExtractor<
           internalSet(attributes, responseAttributeKey(name), values);
         }
       }
+      HttpClientResponseConsumerHolder.getCustomizer().consume(getter, request, response);
     }
 
     String errorType = null;

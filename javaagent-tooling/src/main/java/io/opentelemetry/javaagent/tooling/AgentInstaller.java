@@ -19,6 +19,9 @@ import io.opentelemetry.context.Context;
 import io.opentelemetry.context.ContextStorage;
 import io.opentelemetry.context.Scope;
 import io.opentelemetry.instrumentation.api.internal.EmbeddedInstrumentationProperties;
+import io.opentelemetry.instrumentation.api.semconv.http.HttpClientResponseConsumer;
+import io.opentelemetry.instrumentation.api.semconv.http.HttpClientResponseConsumerHolder;
+import io.opentelemetry.instrumentation.api.semconv.http.HttpCommonAttributesGetter;
 import io.opentelemetry.javaagent.bootstrap.AgentClassLoader;
 import io.opentelemetry.javaagent.bootstrap.BootstrapPackagePrefixesHolder;
 import io.opentelemetry.javaagent.bootstrap.ClassFileTransformerHolder;
@@ -204,6 +207,7 @@ public class AgentInstaller {
     ClassFileTransformerHolder.setClassFileTransformer(resettableClassFileTransformer);
 
     addHttpServerResponseCustomizers(extensionClassLoader);
+    addHttpClientResponseConsumers(extensionClassLoader);
 
     runAfterAgentListeners(agentListeners, autoConfiguredSdk, sdkConfig);
   }
@@ -301,6 +305,24 @@ public class AgentInstaller {
 
             for (HttpServerResponseCustomizer modifier : customizers) {
               modifier.customize(serverContext, response, responseMutator);
+            }
+          }
+        });
+  }
+
+  private static void addHttpClientResponseConsumers(ClassLoader extensionClassLoader) {
+    List<HttpClientResponseConsumer> customizers =
+        load(HttpClientResponseConsumer.class, extensionClassLoader);
+
+    HttpClientResponseConsumerHolder.setConsumer(
+        new HttpClientResponseConsumer() {
+          @Override
+          public <REQUEST, RESPONSE> void consume(
+              HttpCommonAttributesGetter<REQUEST, RESPONSE> getter,
+              REQUEST request,
+              RESPONSE response) {
+            for (HttpClientResponseConsumer modifier : customizers) {
+              modifier.consume(getter, request, response);
             }
           }
         });
