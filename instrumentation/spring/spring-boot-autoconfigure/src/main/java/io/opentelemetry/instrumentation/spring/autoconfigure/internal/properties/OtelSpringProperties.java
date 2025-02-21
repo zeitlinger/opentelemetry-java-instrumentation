@@ -17,6 +17,27 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "otel")
 public final class OtelSpringProperties {
 
+  public static final class OtlpHeader {
+    private String key;
+    private String value;
+
+    public String getKey() {
+      return key;
+    }
+
+    public void setKey(String key) {
+      this.key = key;
+    }
+
+    public String getValue() {
+      return value;
+    }
+
+    public void setValue(String value) {
+      this.value = value;
+    }
+  }
+
   /**
    * This class is internal and is hence not for public use. Its APIs are unstable and can change at
    * any time.
@@ -315,6 +336,8 @@ public final class OtelSpringProperties {
 
   private List<String> propagators = Collections.emptyList();
 
+  private List<OtlpHeader> otlpHeaders = Collections.emptyList();
+
   private Java java = new Java();
 
   private Experimental experimental = new Experimental();
@@ -341,6 +364,14 @@ public final class OtelSpringProperties {
 
   public void setJava(Java java) {
     this.java = java;
+  }
+
+  public List<OtlpHeader> getOtlpHeaders() {
+    return otlpHeaders;
+  }
+
+  public void setOtlpHeaders(List<OtlpHeader> otlpHeaders) {
+    this.otlpHeaders = otlpHeaders;
   }
 
   public Experimental getExperimental() {
