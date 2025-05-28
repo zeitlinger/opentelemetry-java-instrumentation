@@ -7,7 +7,9 @@ package io.opentelemetry.instrumentation.api.internal;
 
 import static java.util.Arrays.asList;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
