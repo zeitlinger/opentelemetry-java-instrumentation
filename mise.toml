@@ -2,8 +2,7 @@
 lychee = "0.20.1"
 
 [settings]
-# Only install tools explicitly defined in the [tools] section above
-idiomatic_version_file_enable_tools = []
+idiomatic_version_file_enable_tools = ["java"]
 
 # Windows configuration for file-based tasks
 # Based on: https://github.com/jdx/mise/discussions/4461
@@ -19,3 +18,19 @@ file = "https://raw.githubusercontent.com/open-telemetry/opentelemetry-java-cont
 
 [tasks."lint:links-in-modified-files"]
 file = "https://raw.githubusercontent.com/open-telemetry/opentelemetry-java-contrib/refs/heads/main/.mise/tasks/lint/links-in-modified-files.sh"
+
+[tasks.format]
+dir = "{{cwd}}"
+run = "{{config_root}}/gradlew spotlessApply"
+
+[tasks.test]
+dir = "{{cwd}}"
+run = "{{config_root}}/gradlew test -Ddev=true -x spotlessCheck -x checkstyleMain"
+
+[tasks.check]
+dir = "{{cwd}}"
+run = "{{config_root}}/gradlew check"
+
+[tasks.build]
+dir = "{{cwd}}"
+run = "{{config_root}}/gradlew assemble"
